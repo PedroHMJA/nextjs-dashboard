@@ -1,10 +1,10 @@
 "use server";
 import { z } from "zod";
-import { revalidatePath  } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import postgres from 'postgres';
+import postgres from "postgres";
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl:'require' })
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
 const FormSchema = z.object({
   id: z.string(),
@@ -23,12 +23,45 @@ export async function createInvoice(formData: FormData) {
     status: formData.get("status"),
   });
   const amountInCents = amount * 100;
-  const date = new Date().toISOString().split('T')[0];
+  const date = new Date().toISOString().split("T")[0];
 
-  await sql`
+  try {
+    await sql`
     insert into invoices(customer_id, amount, status, date)
-    values (${customerId},${amount},${status},${date})
+    values (${customerId},${amountInCents},${status},${date})
   `;
-  revalidatePath('/dashboard/invoices');
-  redirect('/dashboard/invoices');
+  } catch (error) {
+    console.error(error);
+  }
+
+  revalidatePath("/dashboard/invoices");
+  redirect("/dashboard/invoices");
+}
+
+const UpdateInvoice = FormSchema.omit({ id: true, date: true });
+
+export async function updateInvoice(id: string, formData: FormData) {
+  const { customerId, amount, status } = UpdateInvoice.parse({
+    customerId: formData.get("customerId"),
+    amount: formData.get("amount"),
+    status: formData.get("status"),
+  });
+
+  const amountInCents = amount * 100;
+  try {
+    await sql`
+    update invoices
+    set customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
+    where id = ${id}  
+  `;
+  } catch (error) {
+    console.error(error);
+  }
+  revalidatePath("dashboard/invoices");
+  redirect("/dashboard/invoices");
+}
+export async function deleteInvoice(id: string) {
+
+  await sql`delete from invoices where id = ${id}`;
+  revalidatePath("/dashboard/invoices");
 }
